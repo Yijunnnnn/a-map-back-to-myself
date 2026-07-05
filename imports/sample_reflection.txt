@@ -1,0 +1,1 @@
+﻿Today I was confused about how to separate demo memories from real user memories. I felt worried that the system might mix fake evidence with real user data. After thinking through the profile_id and source_type design, I updated the architecture so demo mode and user mode are separated. This made the SelfMap system more accurate and trustworthy.

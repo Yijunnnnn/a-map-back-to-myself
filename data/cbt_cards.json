@@ -1,0 +1,44 @@
+[
+  {
+    "id": "cbt_001",
+    "name": "Cognitive Model",
+    "core_idea": "Thoughts and interpretations influence emotions and behaviors.",
+    "product_mapping": "Treat user self-beliefs as hypotheses, not facts.",
+    "runtime_use": "Used by the belief analysis and reflection workflow."
+  },
+  {
+    "id": "cbt_002",
+    "name": "Automatic Thoughts",
+    "core_idea": "People often have fast, automatic interpretations under stress.",
+    "product_mapping": "Extract the user's raw self-judgment from emotional input.",
+    "runtime_use": "Used by the belief extractor."
+  },
+  {
+    "id": "cbt_003",
+    "name": "Cognitive Distortions",
+    "core_idea": "Some thoughts are biased, overly broad, or unsupported by evidence.",
+    "product_mapping": "Detect overgeneralization, negativity bias, catastrophizing, emotional reasoning, and impostor-like thoughts.",
+    "runtime_use": "Used by the CBT bias agent."
+  },
+  {
+    "id": "cbt_004",
+    "name": "Evidence Examination",
+    "core_idea": "A belief can be checked against supporting and contradicting evidence.",
+    "product_mapping": "Retrieve evidence cards that support or contradict the user's belief.",
+    "runtime_use": "Used by the evidence planner and retriever."
+  },
+  {
+    "id": "cbt_005",
+    "name": "Cognitive Reframing",
+    "core_idea": "A more accurate interpretation can reduce emotional distortion.",
+    "product_mapping": "Generate a narrower, evidence-based reframe.",
+    "runtime_use": "Used by the reflection agent."
+  },
+  {
+    "id": "cbt_006",
+    "name": "Behavioral Next Step",
+    "core_idea": "Small concrete actions help translate reflection into behavior.",
+    "product_mapping": "Suggest one small next action after the reframe.",
+    "runtime_use": "Used by the final reflection output."
+  }
+]

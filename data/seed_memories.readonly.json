@@ -1,0 +1,21 @@
+[
+  {
+    "id": "mem_001",
+    "timestamp": "2026-06-01T10:00:00Z",
+    "content": "I failed the interview at tech firm A. I felt very discouraged.",
+    "context": "Job search period in summer 2026",
+    "inferred_beliefs": [
+      "I struggle with technical interviews",
+      "I might not get a new job quickly"
+    ]
+  },
+  {
+    "id": "mem_002",
+    "timestamp": "2026-06-15T14:30:00Z",
+    "content": "My manager praised my code refactoring work in the team meeting.",
+    "context": "Current workplace project delta",
+    "inferred_beliefs": [
+      "I am capable of producing high quality code in a team setting"
+    ]
+  }
+]
