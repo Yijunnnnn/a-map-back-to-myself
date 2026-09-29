@@ -15,6 +15,9 @@
 import os
 import json
 import re
+import logging
+import math
+from app.semantic_retriever import semantic_scores
 from typing import List, Dict, Any, Optional
 from app.schemas import EvidenceCard, EvidenceDard
 
@@ -130,14 +133,40 @@ def retrieve_candidate_evidence(
     query_terms = _relevance_terms(belief_text)
     if not query_terms or top_k <= 0:
         return []
+    texts = [" ".join([card.event, *card.supports, *card.contradicts, *card.skills])
+             for card in filtered_cards]
+    similarities = None
+    threshold = 0.55
+    if os.getenv("SELFMAP_RETRIEVAL_MODE", "lexical").lower() == "hybrid" and texts:
+        try:
+            threshold = float(os.getenv("SELFMAP_SEMANTIC_THRESHOLD", "0.55"))
+            if not math.isfinite(threshold) or not 0 < threshold <= 1:
+                raise ValueError("Invalid threshold")
+            similarities = semantic_scores(belief_text, texts)
+            if len(similarities) != len(texts) or not all(
+                math.isfinite(value) and -1 <= value <= 1 for value in similarities
+            ):
+                raise ValueError("Invalid similarity scores")
+        except Exception:
+            # Never include exception details: they may contain personal text.
+            logging.getLogger(__name__).warning(
+                "Local semantic retrieval unavailable; using lexical retrieval.")
+            similarities = None
     ranked_cards = []
-    for card in filtered_cards:
-        card_terms = _relevance_terms(" ".join(
-            [card.event, *card.supports, *card.contradicts, *card.skills]
-        ))
-        score = len(query_terms & card_terms)
-        if score > 0:
-            ranked_cards.append((score, card))
+    for index, card in enumerate(filtered_cards):
+        overlap = len(query_terms & _relevance_terms(texts[index]))
+        lexical = overlap / len(query_terms)
+        similarity = similarities[index] if similarities is not None else None
+        if similarity is not None:
+            # Require semantic relevance even when an incidental word matches.
+            if similarity < threshold:
+                continue
+            score = 0.85 * similarity + 0.15 * lexical
+        else:
+            if not overlap:
+                continue
+            score = lexical
+        ranked_cards.append((score, card))
 
     ranked_cards.sort(key=lambda item: item[0], reverse=True)
     return [card for _, card in ranked_cards[:top_k]]
