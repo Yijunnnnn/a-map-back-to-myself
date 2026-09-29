@@ -1,0 +1,3 @@
+# Optional local semantic retrieval; install after the base app.
+# Separate from uv.lock: see docs/semantic_retrieval.md.
+sentence-transformers>=3.0,<6

@@ -14,8 +14,41 @@
 
 import os
 import json
+import re
+import logging
+import math
+from app.semantic_retriever import semantic_scores
 from typing import List, Dict, Any, Optional
 from app.schemas import EvidenceCard, EvidenceDard
+
+
+# Ignore grammatical words so shared pronouns do not count as evidence.
+_STOP_WORDS = frozenset("""
+a an the i me my myself we us our you your he she it they them their
+am is are was were be been being do does did have has had
+can cannot cant could would should will shall may might must
+not no never always nothing anything everything something
+to of in on at for from with by as and or but if that this these those
+so very really feel feels feeling
+ich mich mir mein meine wir uns unser du dich dir dein deine
+er sie es ihr ihnen der die das ein eine einer einen einem eines
+und oder aber dass wenn weil zu von mit auf im in am an für als
+bin bist ist sind war waren sein habe hat haben kann können nicht nie
+""".split())
+
+
+def _relevance_terms(text: str) -> set[str]:
+    """Conservative lexical terms; not a semantic or cross-language matcher."""
+    text = text.casefold().replace("’", "'")
+    terms = set()
+    for word in re.findall(r"[^\W_]+", text, flags=re.UNICODE):
+        if re.fullmatch(r"[\u3400-\u9fff]+", word):
+            # Overlapping bigrams support unspaced Chinese without a dependency.
+            terms.update(word[i:i + 2] for i in range(len(word) - 1))
+        elif len(word) > 1 and word not in _STOP_WORDS:
+            terms.add(word)
+    return terms
+
 
 # Helper to load cards
 def load_evidence_cards_raw() -> List[EvidenceCard]:
@@ -95,46 +128,49 @@ def retrieve_candidate_evidence(
                 
         filtered_cards.append(card)
 
-    # 2. Ranking
-    belief_words = set(belief_text.lower().split())
+    # 2. Rank by topical overlap only, without positivity/source bonuses.
+    # Returning no evidence is preferable to filling top_k with unrelated cards.
+    query_terms = _relevance_terms(belief_text)
+    if not query_terms or top_k <= 0:
+        return []
+    texts = [" ".join([card.event, *card.supports, *card.contradicts, *card.skills])
+             for card in filtered_cards]
+    similarities = None
+    threshold = 0.55
+    if os.getenv("SELFMAP_RETRIEVAL_MODE", "lexical").lower() == "hybrid" and texts:
+        try:
+            threshold = float(os.getenv("SELFMAP_SEMANTIC_THRESHOLD", "0.55"))
+            if not math.isfinite(threshold) or not 0 < threshold <= 1:
+                raise ValueError("Invalid threshold")
+            similarities = semantic_scores(belief_text, texts)
+            if len(similarities) != len(texts) or not all(
+                math.isfinite(value) and -1 <= value <= 1 for value in similarities
+            ):
+                raise ValueError("Invalid similarity scores")
+        except Exception:
+            # Never include exception details: they may contain personal text.
+            logging.getLogger(__name__).warning(
+                "Local semantic retrieval unavailable; using lexical retrieval.")
+            similarities = None
     ranked_cards = []
-    
-    for card in filtered_cards:
-        score = 0
-        
-        # Word overlap
-        for s in card.supports:
-            score += sum(1 for w in belief_words if w in s.lower())
-        for c in card.contradicts:
-            score += sum(1 for w in belief_words if w in c.lower())
-            
-        event_lower = card.event.lower()
-        score += sum(1 for w in belief_words if w in event_lower)
-        
-        for sk in card.skills:
-            score += sum(1 for w in belief_words if w in sk.lower())
-
-        # Bonus if evidence contradicts negative belief
-        is_negative_belief = any(neg in belief_text.lower() for neg in [
-            "never", "fail", "not", "no progress", "worthless", "hopeless", "失败", "没进步", "一无是处"
-        ])
-        if is_negative_belief and card.contradicts:
-            score += 5
-            
-        # Bonus for progress / learning / feedback / persistence
-        bonus_skills = {"progress", "learning", "feedback", "persistence", "resilience", "growth"}
-        card_text_content = (card.event + " " + " ".join(card.skills)).lower()
-        if any(b_skill in card_text_content for b_skill in bonus_skills):
-            score += 3
-
-        # Bonus for source_type user_import or manual_input in user mode
-        if mode == "user" and card.source_type in ("user_import", "manual_input"):
-            score += 2
-
+    for index, card in enumerate(filtered_cards):
+        overlap = len(query_terms & _relevance_terms(texts[index]))
+        lexical = overlap / len(query_terms)
+        similarity = similarities[index] if similarities is not None else None
+        if similarity is not None:
+            # Require semantic relevance even when an incidental word matches.
+            if similarity < threshold:
+                continue
+            score = 0.85 * similarity + 0.15 * lexical
+        else:
+            if not overlap:
+                continue
+            score = lexical
         ranked_cards.append((score, card))
 
-    ranked_cards.sort(key=lambda x: x[0], reverse=True)
-    return [item[1] for item in ranked_cards[:top_k]]
+    ranked_cards.sort(key=lambda item: item[0], reverse=True)
+    return [card for _, card in ranked_cards[:top_k]]
+
 
 
 def retrieve_evidence(belief: str, profile_id: str, mode: str) -> List[EvidenceDard]:
